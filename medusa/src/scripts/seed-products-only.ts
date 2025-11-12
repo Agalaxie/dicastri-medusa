@@ -40,7 +40,7 @@ export default async function seedProductsOnly({ container }: ExecArgs) {
   const shippingProfile = shippingProfiles[0];
 
   logger.info("Getting stock location...");
-  const stockLocations = await stockLocationModuleService.listStockLocations();
+  const stockLocations = await stockLocationModuleService.listStockLocations({});
 
   if (!stockLocations.length) {
     logger.error("No stock location found!");
