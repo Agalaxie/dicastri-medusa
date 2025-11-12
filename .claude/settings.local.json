@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "*",
+      "Bash(dir)",
+      "Bash(git clone:*)",
+      "Bash(rd /s /q medusa-backend)",
+      "Bash(rm:*)",
+      "Bash(npx create-medusa-app@latest --skip-db --skip-env)",
+      "Bash(npx create-medusa-app@latest)",
+      "WebFetch(domain:github.com)",
+      "Bash(choco:*)",
+      "Bash(docker --version:*)",
+      "Bash(docker run:*)",
+      "Bash(npx medusa user:*)",
+      "Bash(cat:*)",
+      "Bash(npx medusa exec:*)",
+      "Bash(npm run seed:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
