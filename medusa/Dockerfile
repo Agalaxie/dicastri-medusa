@@ -1,5 +1,5 @@
 # Use Node.js 20 LTS (Medusa requires >=20)
-FROM node:20-alpine
+FROM node:20.18.0-alpine
 
 # Set working directory
 WORKDIR /app
@@ -7,8 +7,8 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install --production=false
+# Install dependencies with exact versions from package-lock.json
+RUN npm ci --production=false
 
 # Copy application code
 COPY . .
