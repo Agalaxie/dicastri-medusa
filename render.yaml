@@ -1,11 +1,11 @@
 services:
   - type: web
     name: dicastri-medusa-backend
-    runtime: node
+    runtime: docker
     region: frankfurt
     plan: free
-    buildCommand: cd medusa && npm install && npm run build
-    startCommand: cd medusa && npm run start
+    dockerfilePath: ./medusa/Dockerfile
+    dockerContext: ./medusa
     envVars:
       - key: DATABASE_URL
         sync: false
