@@ -1,4 +1,13 @@
 services:
+  # Redis service for caching and session management
+  - type: redis
+    name: dicastri-medusa-redis
+    region: frankfurt
+    plan: free
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+  # Medusa backend application
   - type: web
     name: dicastri-medusa-backend
     runtime: docker
@@ -16,9 +25,14 @@ services:
       - key: MEDUSA_ADMIN_ONBOARDING_TYPE
         value: default
       - key: REDIS_URL
-        value: redis://red-placeholder:6379
+        fromService:
+          type: redis
+          name: dicastri-medusa-redis
+          property: connectionString
       - key: NODE_ENV
         value: production
+      - key: PORT
+        value: 9000
       - key: STORE_CORS
         sync: false
       - key: ADMIN_CORS

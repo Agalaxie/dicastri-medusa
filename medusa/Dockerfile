@@ -4,17 +4,20 @@ FROM node:20.18.0-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Install Yarn globally
+RUN corepack enable && corepack prepare yarn@stable --activate
 
-# Install dependencies (npm ci is too strict, use npm install with lock file)
-RUN npm install --production=false
+# Copy package files (including yarn.lock)
+COPY package.json yarn.lock ./
+
+# Install dependencies using Yarn
+RUN yarn install --frozen-lockfile
 
 # Copy application code
 COPY . .
 
 # Build the application
-RUN npm run build
+RUN yarn build
 
 # Expose port
 EXPOSE 9000
@@ -23,4 +26,4 @@ EXPOSE 9000
 ENV NODE_ENV=production
 
 # Start the application
-CMD ["npm", "run", "start"]
+CMD ["yarn", "start"]
