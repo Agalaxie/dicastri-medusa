@@ -4,7 +4,7 @@ services:
     runtime: node
     region: frankfurt
     plan: free
-    buildCommand: cd medusa && npm install && npm run build
+    buildCommand: cd medusa && npm ci && npm run build
     startCommand: cd medusa && npm run start
     envVars:
       - key: DATABASE_URL
