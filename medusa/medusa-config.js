@@ -13,5 +13,8 @@ module.exports = defineConfig({
       cookieSecret: process.env.COOKIE_SECRET || "supersecret",
       port: process.env.PORT || 9000,
     }
+  },
+  admin: {
+    path: "/app"
   }
 })
