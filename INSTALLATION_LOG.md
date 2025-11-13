@@ -98,9 +98,8 @@ cd medusa
 npx medusa user -e stephdumaz@gmail.com -p Rondoudou66!
 ```
 
-**Identifiants admin créés** :
-- Email : `stephdumaz@gmail.com`
-- Password : `Rondoudou66!`
+
+
 
 ---
 
@@ -317,3 +316,313 @@ npx medusa exec ./src/scripts/fix-regions.ts
 8. **Deux terminaux** : Un pour le backend (port 9000), un pour le frontend (port 8000)
 9. **Seed partiel** : Si le seed échoue, vérifier les régions avec le script `fix-regions.ts`
 10. **Admin sans Sign Up** : Toujours créer l'admin via CLI avec `npx medusa user`
+
+---
+
+## 🚀 Déploiement Render - Problèmes et Solutions
+
+### Contexte
+Déploiement du backend Medusa sur Render.com (free tier) avec Docker.
+- **Service URL** : https://dicastri-medusa-backend.onrender.com
+- **GitHub Repo** : https://github.com/Agalaxie/dicastri-medusa
+- **Région** : Frankfurt
+- **Configuration** : Dockerfile avec Node.js
+
+---
+
+### 9. Erreur "MedusaRequest export not found"
+**Problème** : Au déploiement Render, erreur critique :
+```
+The requested module '@medusajs/framework/http' does not provide an export named 'MedusaRequest'
+```
+
+**Cause** : Incompatibilité de version Node.js
+- Local : Node.js 22 (fonctionne)
+- Render : Node.js 25 (auto-sélectionné, incompatible avec Medusa v2)
+- Medusa v2 requiert : Node.js >= 20, < 21
+
+**Solution** : Forcer Node.js 20 LTS sur Render
+
+1. **Créer `.nvmrc`** à la racine du dossier medusa :
+```bash
+echo "20.18.0" > medusa/.nvmrc
+```
+
+2. **Modifier le Dockerfile** pour utiliser Node 20 :
+```dockerfile
+# Avant
+FROM node:alpine
+
+# Après
+FROM node:20.18.0-alpine
+```
+
+3. **Restreindre la version dans `package.json`** :
+```json
+{
+  "engines": {
+    "node": ">=20 <21"
+  }
+}
+```
+
+**Résultat** : Render utilise maintenant Node 20.18.0 et l'erreur disparaît.
+
+---
+
+### 10. Erreur "Unexpected token ':'" (TypeScript)
+**Problème** : Après le fix Node 20, nouvelle erreur au démarrage :
+```
+An error occurred while registering API Routes.
+Error: Unexpected token ':'
+```
+
+**Cause** : Fichiers de routes API en TypeScript (.ts) non transpilés en production
+- `medusa/src/api/admin/custom/route.ts`
+- `medusa/src/api/store/custom/route.ts`
+
+**Tentatives infructueuses** :
+1. ❌ Changer `npm install` → `npm ci` (même erreur)
+2. ❌ Supprimer package-lock.json seulement (même erreur)
+
+**Solution finale** : Convertir les fichiers de routes en JavaScript
+
+1. **Fusionner la branche** contenant les fichiers .js :
+```bash
+git fetch origin
+git merge origin/convert-ts-routes-to-js
+```
+
+2. **Vérifier les fichiers convertis** :
+- `medusa/src/api/admin/custom/route.ts` → `route.js`
+- `medusa/src/api/store/custom/route.ts` → `route.js`
+
+**Résultat** : Plus d'erreurs de syntaxe TypeScript en production.
+
+---
+
+### 11. Incompatibilité package-lock.json
+**Problème** : Malgré Node 20 et fichiers JS, erreurs persistent au build
+
+**Cause** : `package-lock.json` généré avec Node 22 en local
+- Contient des résolutions de dépendances incompatibles avec Node 20
+
+**Solution** : Supprimer package-lock.json pour regénération avec Node 20
+```bash
+cd medusa
+git rm package-lock.json
+git commit -m "Remove package-lock.json for Node 20 compatibility"
+git push origin main
+```
+
+**Important** :
+- Laisser Docker regénérer le lock file avec `npm install` pendant le build
+- Ne pas utiliser `npm ci` car il requiert un lock file existant
+
+**Résultat** : Build Render réussit sans erreurs de dépendances.
+
+---
+
+### 12. Erreur "Admin index.html not found"
+**Problème** : Déploiement réussit mais serveur crash au démarrage :
+```
+Could not find index.html in the admin build directory.
+Make sure to run 'medusa build' before starting the server.
+```
+
+**Analyse** :
+- `npm run build` s'exécute correctement dans le Dockerfile
+- Les fichiers admin sont générés pendant le build
+- Le build de l'admin panel est **très gourmand en ressources**
+- Render free tier a des limites de RAM/CPU strictes
+
+**Solution choisie** : Désactiver l'admin sur Render, l'activer en local uniquement
+
+1. **Modifier `medusa/medusa-config.js`** :
+```javascript
+admin: {
+  // Désactivé en production (Render), activé en local via .env.local
+  disable: process.env.MEDUSA_ADMIN_DISABLE !== 'false'
+}
+```
+
+2. **Créer `medusa/.env.local`** (gitignored) pour le local :
+```env
+# Configuration locale uniquement - n'est pas commitée
+# L'admin est activé en local mais désactivé sur Render
+MEDUSA_ADMIN_DISABLE=false
+```
+
+3. **Mettre à jour `medusa/.env`** :
+```env
+# Activer l'admin en local (mettre à true pour désactiver)
+MEDUSA_ADMIN_DISABLE=false
+```
+
+4. **Ajouter à `medusa/.gitignore`** :
+```
+.env.local
+```
+
+**Comportement** :
+- ✅ **En local** : `.env.local` définit `MEDUSA_ADMIN_DISABLE=false` → Admin activé
+- ✅ **Sur Render** : Variable non définie → Admin désactivé par défaut
+- ✅ **Backend API** : Fonctionne normalement sur les deux environnements
+
+**Note pour le futur** :
+Quand vous passerez au plan payant Render (plus de ressources), vous pourrez réactiver l'admin en ajoutant la variable d'environnement sur Render :
+```
+MEDUSA_ADMIN_DISABLE=false
+```
+
+**Résultat** : Déploiement Render réussi sans admin panel.
+
+---
+
+### 13. Port 9000 déjà utilisé (EADDRINUSE)
+**Problème** : Impossible de démarrer le backend en local après les tests :
+```
+Error: listen EADDRINUSE: address already in use :::9000
+```
+
+**Cause** : Processus Node.js zombies occupant le port 9000
+- Multiples tentatives de démarrage en background
+- Processus non terminés correctement
+
+**Solution** : Identifier et tuer les processus zombies
+
+1. **Trouver les processus utilisant le port** :
+```bash
+netstat -ano | findstr :9000
+```
+
+2. **Identifier les PIDs** (Process IDs) :
+```
+TCP    0.0.0.0:9000    LISTENING    42220
+TCP    [::]:9000       LISTENING    6076
+```
+
+3. **Tuer les processus** :
+```bash
+taskkill //F //PID 42220
+taskkill //F //PID 6076
+```
+
+4. **Attendre quelques secondes** pour libération du port :
+```bash
+timeout /t 5 /nobreak
+```
+
+5. **Redémarrer proprement** :
+```bash
+cd medusa
+npm run dev
+```
+
+**Prévention** :
+- Toujours arrêter proprement le serveur avec `Ctrl+C`
+- Vérifier qu'aucun processus background ne reste actif
+- Utiliser `netstat` avant de redémarrer en cas de doute
+
+**Résultat** : Backend démarre correctement sur le port 9000.
+
+---
+
+### Configuration finale Render
+
+**Variables d'environnement sur Render** :
+```env
+DATABASE_URL=postgresql://postgres.glnobjetjwzgkwqbjduy:123Rondoudou123@aws-1-eu-north-1.pooler.supabase.com:5432/postgres
+JWT_SECRET=supersecret
+COOKIE_SECRET=supersecret
+STRIPE_API_KEY=sk_test_************************************
+STORE_CORS=http://localhost:8000,https://docs.medusajs.com
+ADMIN_CORS=http://localhost:9000,https://docs.medusajs.com
+AUTH_CORS=http://localhost:8000,http://localhost:9000,https://docs.medusajs.com
+```
+
+**Note** : `MEDUSA_ADMIN_DISABLE` n'est PAS définie sur Render, donc l'admin reste désactivé.
+
+**Fichiers modifiés pour le déploiement** :
+- ✅ `medusa/.nvmrc` - Spécifie Node 20.18.0
+- ✅ `medusa/Dockerfile` - Image node:20.18.0-alpine
+- ✅ `medusa/package.json` - Engine "node": ">=20 <21"
+- ✅ `medusa/medusa-config.js` - Admin conditionnel
+- ✅ `medusa/.env.local` - Configuration locale (gitignored)
+- ✅ `medusa/.gitignore` - Ajout de .env.local
+- ✅ Routes API converties : `.ts` → `.js`
+- ✅ `package-lock.json` - Supprimé pour regénération
+
+**État du déploiement** :
+- ✅ Backend Render : https://dicastri-medusa-backend.onrender.com
+- ✅ Base de données : Supabase PostgreSQL (Session Pooler)
+- ✅ API fonctionnelle : `/health`, `/store/*` routes
+- ⚠️ Admin panel : Désactivé (free tier)
+
+---
+
+### Checklist déploiement Render rapide
+
+Pour un déploiement Render réussi à la prochaine fois :
+
+1. **Préparer le code** :
+   - ✅ Node.js 20 LTS (.nvmrc, Dockerfile, package.json)
+   - ✅ Routes API en JavaScript (pas .ts)
+   - ✅ Pas de package-lock.json ou généré avec Node 20
+   - ✅ Admin désactivé par défaut (ou plan payant)
+
+2. **Configuration Render** :
+   - ✅ Région proche des utilisateurs (Frankfurt pour EU)
+   - ✅ Plan : Free (ou Starter pour admin)
+   - ✅ Runtime : Docker
+   - ✅ Variables d'environnement complètes
+
+3. **Variables d'environnement obligatoires** :
+   - `DATABASE_URL` (Supabase Session Pooler)
+   - `JWT_SECRET` et `COOKIE_SECRET`
+   - CORS : `STORE_CORS`, `ADMIN_CORS`, `AUTH_CORS`
+   - `STRIPE_API_KEY` (si paiements activés)
+
+4. **Après déploiement** :
+   - ✅ Tester `/health` endpoint
+   - ✅ Vérifier les logs Render
+   - ✅ Tester routes API `/store/*`
+   - ✅ Connecter le frontend (mettre à jour MEDUSA_BACKEND_URL)
+
+---
+
+## 📍 POINT DE REPRISE - 2025-11-13 01:30
+
+### État actuel
+✅ **Backend local** : Fonctionne sur http://localhost:9000 (avec admin activé)
+✅ **Frontend local** : Fonctionne sur http://localhost:8000
+✅ **Database** : Supabase configurée avec produits et régions
+✅ **GitHub** : Code poussé sur https://github.com/Agalaxie/dicastri-medusa
+✅ **MCP Render** : Installé et configuré
+✅ **Render.com** : Déploiement backend RÉUSSI sur https://dicastri-medusa-backend.onrender.com
+⚠️ **Admin panel** : Activé en local uniquement, désactivé sur Render (free tier)
+
+### Prochaines étapes
+1. ✅ Backend Render déployé et fonctionnel
+2. 🔄 Déployer le frontend sur Vercel (connecter au backend Render)
+3. 🔄 Mettre à jour CORS sur Render pour accepter le domaine Vercel
+4. 🔄 Tester le site complet en production
+5. 💡 (Optionnel) Passer au plan payant Render pour réactiver l'admin en production
+
+### Commandes pour redémarrer les serveurs locaux
+```bash
+# Terminal 1 - Backend
+cd C:\Users\audif\Desktop\dicastri-medusa\medusa
+npm run dev
+
+# Terminal 2 - Frontend  
+cd C:\Users\audif\Desktop\dicastri-medusa\storefront
+npm run dev
+```
+
+### Identifiants importants
+- **Admin Medusa** : stephdumaz@gmail.com / Rondoudou66!
+- **Publishable Key** : pk_58dfaf8e246df51894b0c7291e70961ec094bb2ac7727493c072c1c71eaaec9f
+- **GitHub Repo** : https://github.com/Agalaxie/dicastri-medusa
+- **Render MCP** : Configuré avec token rnd_JWyDYS9ASYWjs0CpcI5bvK8F2rFd
+
