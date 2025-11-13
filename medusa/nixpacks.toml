@@ -2,10 +2,14 @@
 nixPkgs = ["nodejs-20_x"]
 
 [phases.install]
-cmds = ["npm install"]
+cmds = ["npm install --production=false"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "npm run build",
+  "ls -la .medusa || echo 'No .medusa folder'",
+  "ls -la .medusa/admin || echo 'No admin folder'"
+]
 
 [start]
 cmd = "npm run start"

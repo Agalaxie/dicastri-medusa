@@ -15,7 +15,8 @@ module.exports = defineConfig({
     }
   },
   admin: {
-    // Désactivé en production (Render), activé en local via .env.local
+    // Si MEDUSA_ADMIN_DISABLE='false' -> activé
+    // Sinon -> désactivé
     disable: process.env.MEDUSA_ADMIN_DISABLE !== 'false'
   }
 })
